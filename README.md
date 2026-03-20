@@ -1,1 +1,2 @@
-#Atividade em Dupla - Git e GitHub
+#Atividade em Dupla - Git e GitHub Amanda é Linda
+
