@@ -1,4 +1,4 @@
-set fp [open "contador_netlist.tcl" r]
+set fp [open "netlist.v" r]
 
 array set fanout {}
 set wires {}
