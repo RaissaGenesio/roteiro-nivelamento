@@ -1,0 +1,138 @@
+# Tarefa 1
+proc gerar_contagem_celulas {arquivo} {
+    set fp [open $arquivo r]
+    set count_and 0
+    set count_xor 0
+    set count_ff 0
+    while {[gets $fp line] >= 0} {
+        if {[regexp {AND2} $line]} { incr count_and }
+        if {[regexp {XOR2} $line]} { incr count_xor }
+        if {[regexp {flipflop_D} $line]} { incr count_ff }
+    }
+    close $fp
+
+    set total [expr $count_and + $count_xor + $count_ff]
+
+    puts "--- RELATÓRIO DE CÉLULAS ---"
+    puts "AND2: $count_and instâncias"
+    puts "XOR2: $count_xor instâncias"
+    puts "flipflop_D: $count_ff instâncias"
+    puts "----------------------------"
+    puts "TOTAL: $total instâncias"
+}
+
+# Tarefa 2
+proc gerar_hierarquia {arquivo} {
+    puts "\n=== HIERARQUIA DO DESIGN ==="
+    set fp [open $arquivo r]
+
+    set modulos {}
+    array set hierarquia {}
+    array set instancias {}
+
+    while {[gets $fp linha] >= 0} {
+        if {[regexp {module\s+(\w+)} $linha -> nome]} {
+            lappend modulos $nome
+            set hierarquia($nome) {}
+        }
+    }
+
+    seek $fp 0
+    set modulo_pai ""
+
+    while {[gets $fp linha] >= 0} {
+        if {[regexp {module\s+(\w+)} $linha -> nome]} {
+            set modulo_pai $nome
+            continue
+        }
+        if {[regexp {endmodule} $linha]} {
+            set modulo_pai ""
+            continue
+        }
+        if {$modulo_pai ne ""} {
+            foreach sub $modulos {
+                if {$sub ne $modulo_pai} {
+                    if {[regexp "^\\s*$sub\\s+\\w+" $linha]} {
+                        if {[lsearch $hierarquia($modulo_pai) $sub] == -1} {
+                            lappend hierarquia($modulo_pai) $sub
+                        }
+                        if {![info exists instancias($modulo_pai,$sub)]} {
+                            set instancias($modulo_pai,$sub) 0
+                        }
+                        incr instancias($modulo_pai,$sub)
+                    }
+                }
+            }
+        }
+    }
+    close $fp
+
+    foreach mod $modulos {
+        puts "\n$mod"
+        set filhos $hierarquia($mod)
+        if {[llength $filhos] == 0} {
+            puts "└── (módulo primitivo – sem submódulos)"
+        } else {
+            set total [llength $filhos]
+            set i 0
+            foreach sub $filhos {
+                incr i
+                set prefix [expr {$i < $total ? "├──" : "└──"}]
+                puts "$prefix $sub ($instancias($mod,$sub) instâncias)"
+            }
+            if {$mod eq "somador_4bits"} { puts "└── (apenas células primitivas)" }
+            if {$mod eq "contador_4bits"} { puts "└── (células primitivas)" }
+        }
+    }
+}
+
+# Tarefa 3
+proc gerar_estatisticas_conexoes {arquivo} {
+    puts "\n=== ESTATÍSTICAS DE CONEXÕES ==="
+    set fp [open $arquivo r]
+    array set fanout {}
+    set wires {}
+
+    while {[gets $fp linha] >= 0} {
+        if {[regexp {wire\s+([^;]+);} $linha -> lista]} {
+            foreach w [split $lista ","] {
+                lappend wires [string trim $w]
+            }
+        }
+        set conexoes [regexp -all -inline {\.(?:a|b|D|clk|rst)\(([^)]+)\)} $linha]
+        foreach {match net} $conexoes {
+            if {[info exists fanout($net)]} {
+                incr fanout($net)
+            } else {
+                set fanout($net) 1
+            }
+        }
+    }
+    close $fp
+
+    set lista_ordenada {}
+    foreach net [array names fanout] {
+        lappend lista_ordenada [list $net $fanout($net)]
+    }
+    set lista_ordenada [lsort -integer -decreasing -index 1 $lista_ordenada]
+
+    puts "=== TOP 10 NETS POR FANOUT ==="
+    set i 0
+    foreach item $lista_ordenada {
+        if {$i >= 10} break
+        puts "[lindex $item 0]: fanout = [lindex $item 1]"
+        incr i
+    }
+    puts "\n--- NETS COM FANOUT ZERO (POSSÍVEIS ERROS) ---"
+    foreach w $wires {
+        if {![info exists fanout($w)]} { puts $w }
+    }
+}
+
+set filename "contador_netlist.tcl"
+
+gerar_contagem_celulas $filename
+gerar_hierarquia $filename
+gerar_estatisticas_conexoes $filename
+
+puts "\nRelatório finalizado com sucesso."
